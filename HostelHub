@@ -1,0 +1,111 @@
+-- Create users table (managed by Supabase Auth)
+-- Extended user profiles
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID REFERENCES auth.users(id) PRIMARY KEY,
+  full_name TEXT,
+  email TEXT,
+  phone TEXT,
+  college_name TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create hostels table
+CREATE TABLE IF NOT EXISTS hostels (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id UUID REFERENCES auth.users(id),
+  name TEXT NOT NULL,
+  description TEXT,
+  address TEXT NOT NULL,
+  city TEXT NOT NULL,
+  state TEXT NOT NULL,
+  pincode TEXT,
+  latitude DECIMAL(10, 8),
+  longitude DECIMAL(11, 8),
+  price_per_month DECIMAL(10, 2) NOT NULL,
+  total_rooms INTEGER NOT NULL,
+  available_rooms INTEGER NOT NULL,
+  amenities TEXT[], -- Array of amenities
+  images TEXT[], -- Array of image URLs
+  hostel_type TEXT, -- boys, girls, co-ed
+  distance_from_college DECIMAL(5, 2), -- in km
+  rating DECIMAL(3, 2) DEFAULT 0,
+  total_reviews INTEGER DEFAULT 0,
+  is_verified BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create bookings table
+CREATE TABLE IF NOT EXISTS bookings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id),
+  hostel_id UUID REFERENCES hostels(id),
+  check_in_date DATE NOT NULL,
+  check_out_date DATE,
+  duration_months INTEGER NOT NULL,
+  total_amount DECIMAL(10, 2) NOT NULL,
+  status TEXT DEFAULT 'pending', -- pending, confirmed, cancelled, completed
+  payment_status TEXT DEFAULT 'unpaid', -- unpaid, paid, refunded
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create reviews table
+CREATE TABLE IF NOT EXISTS reviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id),
+  hostel_id UUID REFERENCES hostels(id),
+  booking_id UUID REFERENCES bookings(id),
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create favorites table
+CREATE TABLE IF NOT EXISTS favorites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id),
+  hostel_id UUID REFERENCES hostels(id),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, hostel_id)
+);
+
+-- Enable Row Level Security
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hostels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE favorites ENABLE ROW LEVEL SECURITY;
+
+-- Profiles policies
+CREATE POLICY "Public profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
+CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- Hostels policies
+CREATE POLICY "Hostels are viewable by everyone" ON hostels FOR SELECT USING (true);
+CREATE POLICY "Owners can insert their hostels" ON hostels FOR INSERT WITH CHECK (auth.uid() = owner_id);
+CREATE POLICY "Owners can update their hostels" ON hostels FOR UPDATE USING (auth.uid() = owner_id);
+
+-- Bookings policies
+CREATE POLICY "Users can view their own bookings" ON bookings FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can create bookings" ON bookings FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their bookings" ON bookings FOR UPDATE USING (auth.uid() = user_id);
+
+-- Reviews policies
+CREATE POLICY "Reviews are viewable by everyone" ON reviews FOR SELECT USING (true);
+CREATE POLICY "Users can create reviews" ON reviews FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their reviews" ON reviews FOR UPDATE USING (auth.uid() = user_id);
+
+-- Favorites policies
+CREATE POLICY "Users can view their favorites" ON favorites FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can add favorites" ON favorites FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can remove favorites" ON favorites FOR DELETE USING (auth.uid() = user_id);
+
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS hostels_city_idx ON hostels(city);
+CREATE INDEX IF NOT EXISTS hostels_price_idx ON hostels(price_per_month);
+CREATE INDEX IF NOT EXISTS bookings_user_idx ON bookings(user_id);
+CREATE INDEX IF NOT EXISTS reviews_hostel_idx ON reviews(hostel_id);
